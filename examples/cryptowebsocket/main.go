@@ -16,12 +16,10 @@ func main() {
 
 	socket := gowebsocket.New("wss://fstream.binance.com/stream?streams=btcusdt@aggTrade/ethusdt@aggTrade")
 	socket.Timeout = 3 * time.Second
-	socket.ReconnectionOptions = gowebsocket.ReconnectionOptions{
-		RetryOnConnectionError:      true,
-		RetryDelayOnConnectionError: 5 * time.Second,
-		ReconnectOnDisconnection:    true,
-		ReconnectDelay:              3 * time.Second,
-	}
+	socket.Connection.AutoRetry = true
+	socket.Connection.RetryDelay = 5 * time.Second
+	socket.Reconnection.AutoRetry = true
+	socket.Reconnection.RetryDelay = 3 * time.Second
 
 	socket.OnConnectError = func(err error, socket gowebsocket.Socket) {
 		log.Println("Error connecting to ByBit websocket, will attempt reconnection in 5s. Error was:", err)

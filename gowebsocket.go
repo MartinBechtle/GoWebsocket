@@ -12,24 +12,24 @@ import (
 )
 
 type Socket struct {
-	Conn                *websocket.Conn
-	WebsocketDialer     *websocket.Dialer
-	Url                 string
-	ConnectionOptions   ConnectionOptions
-	ReconnectionOptions ReconnectionOptions
-	RequestHeader       http.Header
-	OnConnected         func(socket Socket)
-	OnTextMessage       func(message string, socket Socket)
-	OnBinaryMessage     func(data []byte, socket Socket)
-	Log                 Logger
-	Timeout             time.Duration
-	OnConnectError      func(err error, socket Socket)
-	OnDisconnected      func(err error, socket Socket)
-	OnPingReceived      func(data string, socket Socket)
-	OnPongReceived      func(data string, socket Socket)
-	connected           bool
-	sendMu              *sync.Mutex // Prevent "concurrent write to websocket connection"
-	receiveMu           *sync.Mutex
+	Conn            *websocket.Conn
+	WebsocketDialer *websocket.Dialer
+	Url             string
+	Connection      ConnectionOptions
+	Reconnection    ReconnectionOptions
+	RequestHeader   http.Header
+	OnConnected     func(socket Socket)
+	OnTextMessage   func(message string, socket Socket)
+	OnBinaryMessage func(data []byte, socket Socket)
+	Log             Logger
+	Timeout         time.Duration
+	OnConnectError  func(err error, socket Socket)
+	OnDisconnected  func(err error, socket Socket)
+	OnPingReceived  func(data string, socket Socket)
+	OnPongReceived  func(data string, socket Socket)
+	connected       bool
+	sendMu          *sync.Mutex // Prevent "concurrent write to websocket connection"
+	receiveMu       *sync.Mutex
 }
 
 type ConnectionOptions struct {
@@ -37,28 +37,26 @@ type ConnectionOptions struct {
 	UseSSL         bool
 	Proxy          func(*http.Request) (*url.URL, error)
 	SubProtocols   []string
+	AutoRetry      bool
+	RetryDelay     time.Duration
 }
 
 type ReconnectionOptions struct {
-	RetryOnConnectionError      bool
-	RetryDelayOnConnectionError time.Duration
-	ReconnectOnDisconnection    bool
-	ReconnectDelay              time.Duration
+	AutoRetry  bool
+	RetryDelay time.Duration
 }
 
 func New(url string) Socket {
 	return Socket{
 		Url:           url,
 		RequestHeader: http.Header{},
-		ConnectionOptions: ConnectionOptions{
+		Connection: ConnectionOptions{
 			UseCompression: false,
 			UseSSL:         true,
+			AutoRetry:      false,
 		},
-		ReconnectionOptions: ReconnectionOptions{
-			RetryOnConnectionError:      false,
-			RetryDelayOnConnectionError: 5 * time.Second,
-			ReconnectOnDisconnection:    false,
-			ReconnectDelay:              5 * time.Second,
+		Reconnection: ReconnectionOptions{
+			AutoRetry: false,
 		},
 		WebsocketDialer: &websocket.Dialer{},
 		Log:             NoOpLogger{},
@@ -69,10 +67,10 @@ func New(url string) Socket {
 }
 
 func (socket *Socket) setConnectionOptions() {
-	socket.WebsocketDialer.EnableCompression = socket.ConnectionOptions.UseCompression
-	socket.WebsocketDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: socket.ConnectionOptions.UseSSL}
-	socket.WebsocketDialer.Proxy = socket.ConnectionOptions.Proxy
-	socket.WebsocketDialer.Subprotocols = socket.ConnectionOptions.SubProtocols
+	socket.WebsocketDialer.EnableCompression = socket.Connection.UseCompression
+	socket.WebsocketDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: socket.Connection.UseSSL}
+	socket.WebsocketDialer.Proxy = socket.Connection.Proxy
+	socket.WebsocketDialer.Subprotocols = socket.Connection.SubProtocols
 }
 
 func (socket *Socket) Connect() {
@@ -205,8 +203,8 @@ func (socket *Socket) IsConnected() bool {
 }
 
 func (socket *Socket) maybeScheduleReconnection() {
-	if socket.ReconnectionOptions.ReconnectOnDisconnection {
-		delay := socket.ReconnectionOptions.ReconnectDelay
+	if socket.Reconnection.AutoRetry {
+		delay := socket.Reconnection.RetryDelay
 		socket.Log.Debugf("Will attempt reconnection in %s", delay)
 		time.AfterFunc(delay, func() {
 			socket.Connect()
@@ -215,8 +213,8 @@ func (socket *Socket) maybeScheduleReconnection() {
 }
 
 func (socket *Socket) maybeRetryConnection() {
-	if socket.ReconnectionOptions.ReconnectOnDisconnection {
-		delay := socket.ReconnectionOptions.RetryDelayOnConnectionError
+	if socket.Reconnection.AutoRetry {
+		delay := socket.Reconnection.RetryDelay
 		socket.Log.Debugf("Retrying connection in %s", delay)
 		time.AfterFunc(delay, func() {
 			socket.Connect()

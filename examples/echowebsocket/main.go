@@ -13,7 +13,7 @@ func main() {
 	signal.Notify(interrupt, os.Interrupt)
 
 	socket := gowebsocket.New("ws://echo.websocket.org/")
-	socket.ConnectionOptions = gowebsocket.ConnectionOptions{
+	socket.Connection = gowebsocket.ConnectionOptions{
 		//Proxy: echowebsocket.BuildProxy("http://example.com"),
 		UseSSL:         false,
 		UseCompression: false,
