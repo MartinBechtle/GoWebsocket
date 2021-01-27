@@ -1,6 +1,7 @@
 package gowebsocket
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"net/http"
@@ -73,12 +74,12 @@ func (socket *Socket) setConnectionOptions() {
 	socket.WebsocketDialer.Subprotocols = socket.Connection.SubProtocols
 }
 
-func (socket *Socket) Connect() {
+func (socket *Socket) Connect(ctx context.Context) {
 	var err error
 	var resp *http.Response
 	socket.setConnectionOptions()
 
-	socket.Conn, resp, err = socket.WebsocketDialer.Dial(socket.Url, socket.RequestHeader)
+	socket.Conn, resp, err = socket.WebsocketDialer.DialContext(ctx, socket.Url, socket.RequestHeader)
 
 	if err != nil {
 		socket.Log.Errorf("Error while connecting: %v", err)
@@ -89,7 +90,7 @@ func (socket *Socket) Connect() {
 		if socket.OnConnectError != nil {
 			socket.OnConnectError(err, *socket)
 		}
-		socket.maybeRetryConnection()
+		socket.maybeRetryConnection(ctx)
 		return
 	}
 
@@ -126,7 +127,7 @@ func (socket *Socket) Connect() {
 		if socket.OnDisconnected != nil {
 			socket.OnDisconnected(errors.New(text), *socket)
 		}
-		socket.maybeScheduleReconnection()
+		socket.maybeScheduleReconnection(ctx)
 		return result
 	})
 
@@ -144,7 +145,7 @@ func (socket *Socket) Connect() {
 				if socket.OnDisconnected != nil {
 					socket.OnDisconnected(err, *socket)
 				}
-				socket.maybeScheduleReconnection()
+				socket.maybeScheduleReconnection(ctx)
 				return
 			}
 			socket.Log.Debugf("Received message: %s", message)
@@ -202,22 +203,22 @@ func (socket *Socket) IsConnected() bool {
 	return socket.connected
 }
 
-func (socket *Socket) maybeScheduleReconnection() {
+func (socket *Socket) maybeScheduleReconnection(ctx context.Context) {
 	if socket.Reconnection.AutoRetry {
 		delay := socket.Reconnection.RetryDelay
 		socket.Log.Debugf("Will attempt reconnection in %s", delay)
 		time.AfterFunc(delay, func() {
-			socket.Connect()
+			socket.Connect(ctx)
 		})
 	}
 }
 
-func (socket *Socket) maybeRetryConnection() {
+func (socket *Socket) maybeRetryConnection(ctx context.Context) {
 	if socket.Reconnection.AutoRetry {
 		delay := socket.Reconnection.RetryDelay
 		socket.Log.Debugf("Retrying connection in %s", delay)
 		time.AfterFunc(delay, func() {
-			socket.Connect()
+			socket.Connect(ctx)
 		})
 	}
 }
